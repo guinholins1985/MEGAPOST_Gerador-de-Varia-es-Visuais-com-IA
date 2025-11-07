@@ -1,0 +1,5 @@
+{
+  "name": "Gerador de Variações Visuais com IA",
+  "description": "Um aplicativo que usa IA para gerar variações visuais de uma imagem fornecida por upload de arquivo ou URL.",
+  "requestFramePermissions": []
+}
