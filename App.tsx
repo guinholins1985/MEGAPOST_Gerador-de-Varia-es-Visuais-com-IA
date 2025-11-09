@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback } from 'react';
 import { ImageInput } from './components/ImageInput';
 import { GeneratedImages } from './components/GeneratedImages';
@@ -16,7 +15,6 @@ export default function App() {
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState<string>(process.env.API_KEY || '');
 
 
   const handleGeneration = useCallback(async (imageFile: File, currentPrompt: string) => {
@@ -25,11 +23,12 @@ export default function App() {
     setGeneratedImages([]);
 
     try {
-      const result = await generateImageVariation(imageFile, currentPrompt, apiKey);
+      const result = await generateImageVariation(imageFile, currentPrompt);
       setGeneratedImages([result]);
     } catch (err) {
       if (err instanceof Error) {
-        setError(`Falha ao gerar imagem: ${err.message}. Verifique o console para mais detalhes.`);
+        // A mensagem de erro do serviço agora é autocontida e amigável para o usuário.
+        setError(err.message);
       } else {
         setError('Ocorreu um erro desconhecido.');
       }
@@ -37,7 +36,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [apiKey]);
+  }, []);
 
   const handleImageSelected = useCallback((file: File, previewUrl: string) => {
     setOriginalImage({ file, previewUrl });

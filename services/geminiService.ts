@@ -1,44 +1,32 @@
-
-import { GoogleGenAI, Modality } from "@google/genai";
 import { fileToBase64 } from "../utils/imageUtils";
 
-export const generateImageVariation = async (imageFile: File, prompt: string, apiKey: string): Promise<string> => {
-    if (!apiKey) {
-      throw new Error("API key não configurada. Defina a variável de ambiente API_KEY.");
-    }
-    
-    const ai = new GoogleGenAI({ apiKey });
-
+export const generateImageVariation = async (imageFile: File, prompt: string): Promise<string> => {
+    // Converte o arquivo para base64 para enviá-lo como JSON
     const { mimeType, data: base64ImageData } = await fileToBase64(imageFile);
 
-    const imagePart = {
-        inlineData: {
-            data: base64ImageData,
-            mimeType: mimeType,
+    // Chama nossa própria API de backend da função serverless
+    const response = await fetch('/api/generate', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
         },
-    };
-
-    const textPart = {
-        text: prompt,
-    };
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents: {
-            parts: [imagePart, textPart],
-        },
-        config: {
-            responseModalities: [Modality.IMAGE],
-        },
+        body: JSON.stringify({
+            mimeType,
+            base64ImageData,
+            prompt,
+        }),
     });
-    
-    for (const part of response.candidates[0].content.parts) {
-        if (part.inlineData) {
-            const base64ImageBytes: string = part.inlineData.data;
-            const imageMimeType = part.inlineData.mimeType;
-            return `data:${imageMimeType};base64,${base64ImageBytes}`;
-        }
+
+    const result = await response.json();
+
+    if (!response.ok) {
+        // Lança a mensagem de erro da nossa API de backend
+        throw new Error(result.error || `Ocorreu um erro desconhecido na API (status: ${response.status}).`);
     }
-    
-    throw new Error("Nenhuma imagem foi gerada pela API.");
+
+    if (!result.imageUrl) {
+        throw new Error("A API não retornou uma URL de imagem válida.");
+    }
+
+    return result.imageUrl;
 };
