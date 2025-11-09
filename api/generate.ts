@@ -1,7 +1,5 @@
-import { GoogleGenAI, Modality } from "@google/genai";
-
-// Esta é uma função serverless do Vercel, executada em um ambiente Node.js.
-// Não precisa de tipos explícitos para req/res para funcionar.
+// Esta é uma função serverless do Vercel.
+// Ela foi reescrita para usar a API REST nativa em vez do SDK para máxima compatibilidade.
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', ['POST']);
@@ -15,45 +13,61 @@ export default async function handler(req, res) {
         return res.status(400).json({ error: 'Parâmetros ausentes: mimeType, base64ImageData, prompt são obrigatórios.' });
     }
     
-    // A chave de API é acessada com segurança a partir das variáveis de ambiente no servidor.
-    if (!process.env.API_KEY) {
+    const apiKey = process.env.API_KEY;
+    if (!apiKey) {
         return res.status(500).json({ error: 'A chave de API não está configurada no servidor.' });
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${apiKey}`;
 
-    const imagePart = {
-      inlineData: {
-        data: base64ImageData,
-        mimeType: mimeType,
-      },
-    };
-
-    const textPart = {
-      text: prompt,
-    };
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+    const requestBody = {
       contents: {
-        parts: [imagePart, textPart],
+        parts: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64ImageData,
+            },
+          },
+          {
+            text: prompt,
+          },
+        ],
       },
       config: {
-        responseModalities: [Modality.IMAGE],
+        responseModalities: ['IMAGE'],
       },
+    };
+
+    const geminiResponse = await fetch(GEMINI_API_URL, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
     });
 
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        const base64ImageBytes: string = part.inlineData.data;
-        const imageMimeType = part.inlineData.mimeType;
-        const imageUrl = `data:${imageMimeType};base64,${base64ImageBytes}`;
-        return res.status(200).json({ imageUrl });
-      }
+    if (!geminiResponse.ok) {
+        const errorData = await geminiResponse.json();
+        console.error('Gemini API Error:', errorData);
+        const errorMessage = errorData.error?.message || `Erro na API Gemini: ${geminiResponse.statusText}`;
+        return res.status(geminiResponse.status).json({ error: errorMessage });
+    }
+
+    const responseData = await geminiResponse.json();
+    
+    // Extrai os dados da imagem da estrutura da resposta REST
+    const imagePart = responseData.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
+
+    if (imagePart && imagePart.inlineData) {
+      const base64ImageBytes = imagePart.inlineData.data;
+      const imageMimeType = imagePart.inlineData.mimeType;
+      const imageUrl = `data:${imageMimeType};base64,${base64ImageBytes}`;
+      return res.status(200).json({ imageUrl });
     }
 
     // Se nenhuma parte da imagem for encontrada na resposta
-    throw new Error("Nenhuma imagem foi gerada pela API.");
+    throw new Error("Nenhuma imagem foi gerada pela API ou a resposta teve um formato inesperado.");
 
   } catch (error) {
     console.error('Error in /api/generate:', error);
